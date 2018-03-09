@@ -37,7 +37,6 @@ class LabelTool():
         self.outDir = ''
         self.cur = 0
         self.total = 0
-        self.category = 0
         self.imagename = ''
         self.labelfilename = ''
         self.tkimg = None
@@ -74,23 +73,28 @@ class LabelTool():
         self.parent.bind("s", self.cancelBBox)
         self.parent.bind("a", self.prevImage) # press 'a' to go backforward
         self.parent.bind("d", self.nextImage) # press 'd' to go forward
+        self.parent.bind("x", self.clearBBox)
+        for i in xrange(9):
+            self.parent.bind(str(i), self.classkeyHandler)
         self.mainPanel.grid(row = 1, column = 1, rowspan = 4, sticky = W+N)
 
         # choose class
         self.classname = StringVar()
-        self.classcandidate = ttk.Combobox(self.frame,state='readonly',textvariable=self.classname)
-        self.classcandidate.grid(row=1,column=2)
+        # self.classcandidate = ttk.Combobox(self.frame,state='readonly',textvariable=self.classname)
+        self.classbox = Listbox(self.frame, width = 22, height = 10)
+        self.classbox.grid(row = 1, column=2, sticky=W+E)
         if os.path.exists(self.classcandidate_filename):
         	with open(self.classcandidate_filename) as cf:
-        		for line in cf.readlines():
+        		for (i, line) in enumerate(cf.readlines()):
         			# print line
-        			self.cla_can_temp.append(line.strip('\n'))
+        			self.classbox.insert(END, (str(i+1) + ': ' + line.strip('\n')))
         #print self.cla_can_temp
-        self.classcandidate['values'] = self.cla_can_temp
-        self.classcandidate.current(0)
-        self.currentLabelclass = self.classcandidate.get() #init
-        self.btnclass = Button(self.frame, text = 'ComfirmClass', command = self.setClass)
-        self.btnclass.grid(row=2,column=2,sticky = W+E)
+        # self.classcandidate['values'] = self.cla_can_temp
+        # self.classcandidate.current(0)
+        #self.currentLabelclass = self.classcandidate.get() #init
+        # self.btnclass = Button(self.frame, text = 'ComfirmClass', command = self.setClass)
+        # self.btnclass.grid(row=2,column=2,sticky = W+E)
+ 
 
         # showing bbox info & delete bbox
         self.lb1 = Label(self.frame, text = 'Bounding boxes:')
@@ -104,7 +108,7 @@ class LabelTool():
 
         # control panel for image navigation
         self.ctrPanel = Frame(self.frame)
-        self.ctrPanel.grid(row = 7, column = 1, columnspan = 2, sticky = W+E)
+        self.ctrPanel.grid(row = 7, column = 1, columnspan = 2, sticky = W)
         self.prevBtn = Button(self.ctrPanel, text='<< Prev', width = 10, command = self.prevImage)
         self.prevBtn.pack(side = LEFT, padx = 5, pady = 3)
         self.nextBtn = Button(self.ctrPanel, text='Next >>', width = 10, command = self.nextImage)
@@ -120,18 +124,18 @@ class LabelTool():
 
 
         # example pannel for illustration
-        self.egPanel = Frame(self.frame, border = 10)
-        self.egPanel.grid(row = 1, column = 0, rowspan = 5, sticky = N)
-        self.tmpLabel2 = Label(self.egPanel, text = "Examples:")
-        self.tmpLabel2.pack(side = TOP, pady = 5)
-        self.egLabels = []
-        for i in range(3):
-            self.egLabels.append(Label(self.egPanel))
-            self.egLabels[-1].pack(side = TOP)
+        # self.egPanel = Frame(self.frame, border = 10)
+        # self.egPanel.grid(row = 1, column = 0, rowspan = 5, sticky = N)
+        # self.tmpLabel2 = Label(self.egPanel, text = "Examples:")
+        # self.tmpLabel2.pack(side = TOP, pady = 5)
+        # self.egLabels = []
+        # for i in range(3):
+        #     self.egLabels.append(Label(self.egPanel))
+        #     self.egLabels[-1].pack(side = TOP)
 
         # display mouse position
         self.disp = Label(self.ctrPanel, text='')
-        self.disp.pack(side = RIGHT)
+        self.disp.pack(side = LEFT, padx = 5)
 
         self.frame.columnconfigure(1, weight = 1)
         self.frame.rowconfigure(4, weight = 1)
@@ -142,52 +146,57 @@ class LabelTool():
 
     def loadDir(self, dbg = False):
         if not dbg:
-            s = self.entry.get()
+            self.imageDir = os.path.join(r'./Images', '%s' %(str(self.entry.get())))
+            if not os.path.isdir(self.imageDir):
+               tkMessageBox.showerror("Error!", message = "The specified dir %s doesn't exist!"%(temp_dir))
+               return  
             self.parent.focus()
-            self.category = int(s)
+
         else:
             s = r'D:\workspace\python\labelGUI'
 ##        if not os.path.isdir(s):
 ##            tkMessageBox.showerror("Error!", message = "The specified dir doesn't exist!")
 ##            return
         # get image list
-        self.imageDir = os.path.join(r'./Images', '%03d' %(self.category))
-        #print self.imageDir 
+        
+        print 'Load images from: ' + self.imageDir 
         #print self.category
-        self.imageList = glob.glob(os.path.join(self.imageDir, '*.JPG'))
-        #print self.imageList
+        # in the imagedir there should not be any other files
+        self.imageList = glob.glob(os.path.join(self.imageDir, '*.*'))
+        # print self.imageList
         if len(self.imageList) == 0:
-            print 'No .JPG images found in the specified dir!'
+            print 'No images found in the specified dir!'
             return
 
         # default to the 1st image in the collection
         self.cur = 1
         self.total = len(self.imageList)
+        print "Load %d images"%(self.total)
 
          # set up output dir
-        self.outDir = os.path.join(r'./Labels', '%03d' %(self.category))
+        self.outDir = os.path.join(r'./Labels', '%s' %(self.imageDir.split('/')[-1]))
         if not os.path.exists(self.outDir):
             os.mkdir(self.outDir)
 
         # load example bboxes
         #self.egDir = os.path.join(r'./Examples', '%03d' %(self.category))
-        self.egDir = os.path.join(r'./Examples/demo')
-        print os.path.exists(self.egDir)
-        if not os.path.exists(self.egDir):
-            return
-        filelist = glob.glob(os.path.join(self.egDir, '*.JPG'))
-        self.tmp = []
-        self.egList = []
-        random.shuffle(filelist)
-        for (i, f) in enumerate(filelist):
-            if i == 3:
-                break
-            im = Image.open(f)
-            r = min(SIZE[0] / im.size[0], SIZE[1] / im.size[1])
-            new_size = int(r * im.size[0]), int(r * im.size[1])
-            self.tmp.append(im.resize(new_size, Image.ANTIALIAS))
-            self.egList.append(ImageTk.PhotoImage(self.tmp[-1]))
-            self.egLabels[i].config(image = self.egList[-1], width = SIZE[0], height = SIZE[1])
+        # self.egDir = os.path.join(r'./Examples/demo')
+        # print os.path.exists(self.egDir)
+        # if not os.path.exists(self.egDir):
+        #     return
+        # filelist = glob.glob(os.path.join(self.egDir, '*.JPG'))
+        # self.tmp = []
+        # self.egList = []
+        # random.shuffle(filelist)
+        # for (i, f) in enumerate(filelist):
+        #     if i == 3:
+        #         break
+        #     im = Image.open(f)
+        #     r = min(SIZE[0] / im.size[0], SIZE[1] / im.size[1])
+        #     new_size = int(r * im.size[0]), int(r * im.size[1])
+        #     self.tmp.append(im.resize(new_size, Image.ANTIALIAS))
+        #     self.egList.append(ImageTk.PhotoImage(self.tmp[-1]))
+        #     self.egLabels[i].config(image = self.egList[-1], width = SIZE[0], height = SIZE[1])
 
         self.loadImage()
         print '%d images loaded from %s' %(self.total, s)
@@ -282,7 +291,7 @@ class LabelTool():
         self.bboxList.pop(idx)
         self.listbox.delete(idx)
 
-    def clearBBox(self):
+    def clearBBox(self, event = None):
         for idx in range(len(self.bboxIdList)):
             self.mainPanel.delete(self.bboxIdList[idx])
         self.listbox.delete(0, len(self.bboxList))
@@ -301,12 +310,19 @@ class LabelTool():
             self.cur += 1
             self.loadImage()
 
+    def classkeyHandler(self, event):
+        if event.char.isdigit():
+            self.classbox.select_clear(0, self.classbox.size())
+            self.classbox.selection_set(int(event.char) - 1)
+            self.currentLabelclass = self.classbox.get(int(event.char) - 1).split(' ')[-1]
+
     def gotoImage(self):
         idx = int(self.idxEntry.get())
         if 1 <= idx and idx <= self.total:
             self.saveImage()
             self.cur = idx
             self.loadImage()
+
 
     def setClass(self):
     	self.currentLabelclass = self.classcandidate.get()
